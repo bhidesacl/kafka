@@ -13,12 +13,12 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.apache.kafka.common.utils.Utils;
-import org.apache.kafka.streams.processor.internals.Refac_InternalTopologyBuilder.GlobalStore;
-import org.apache.kafka.streams.processor.internals.Refac_InternalTopologyBuilder.NodeFactory;
-import org.apache.kafka.streams.processor.internals.Refac_InternalTopologyBuilder.ProcessorNodeFactory;
-import org.apache.kafka.streams.processor.internals.Refac_InternalTopologyBuilder.SourceNodeFactory;
-import org.apache.kafka.streams.processor.internals.Refac_InternalTopologyBuilder.SubscriptionUpdates;
-import org.apache.kafka.streams.processor.internals.Refac_InternalTopologyBuilder.TopologyDescription;
+import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.GlobalStore;
+import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.NodeFactory;
+import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.ProcessorNodeFactory;
+import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.SourceNodeFactory;
+import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.SubscriptionUpdates;
+import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.TopologyDescription;
 
 public class Refac_SourceSink {
 	// map from source processor names to subscribed topics (without application-id

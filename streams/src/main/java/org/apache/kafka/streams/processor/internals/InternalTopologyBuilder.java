@@ -57,15 +57,15 @@ public class InternalTopologyBuilder {
 	// node factories in a topological order
 	private final Map<String, NodeFactory> nodeFactories = new LinkedHashMap<>();
 
-	private Refac_TopicStore topicStore;
+	private final Refac_TopicStore topicStore;
 
-	private Refac_SourceSink sourceSink;
+	private final Refac_SourceSink sourceSink;
 
 	// all topics subscribed from source processors (without application-id prefix
 	// for internal topics)
 	private final Set<String> sourceTopicNames = new HashSet<>();
 
-	private Refac_GlobalTopics globalTopics = new Refac_GlobalTopics();
+	private final Refac_GlobalTopics globalTopics = new Refac_GlobalTopics();
 
 	private final Set<String> earliestResetTopics = new HashSet<>();
 
@@ -82,8 +82,14 @@ public class InternalTopologyBuilder {
 	private String applicationId = null;
 
 	private Pattern topicPattern = null;
+	
+	private final static NodeComparator NODE_COMPARATOR = new NodeComparator();
+	
+	private final static GlobalStoreComparator GLOBALSTORE_COMPARATOR = new GlobalStoreComparator();
+	
+	private final static SubtopologyComparator SUBTOPOLOGY_COMPARATOR = new SubtopologyComparator();
 
-	public Refac_InternalTopologyBuilder() {
+	public InternalTopologyBuilder() {
 		this.sourceSink = new Refac_SourceSink(nodeFactories, subscriptionUpdates, globalTopics, nodeGrouper);
 		this.topicStore = new Refac_TopicStore(sourceSink, globalTopics);
 	}
@@ -257,7 +263,7 @@ public class InternalTopologyBuilder {
 	}
 
 	// public for testing only
-	public synchronized final Refac_InternalTopologyBuilder setApplicationId(final String applicationId) {
+	public synchronized final InternalTopologyBuilder setApplicationId(final String applicationId) {
 		Objects.requireNonNull(applicationId, "applicationId can't be null");
 		this.applicationId = applicationId;
 
@@ -266,7 +272,7 @@ public class InternalTopologyBuilder {
 		return this;
 	}
 
-	public synchronized final Refac_InternalTopologyBuilder rewriteTopology(final StreamsConfig config) {
+	public synchronized final InternalTopologyBuilder rewriteTopology(final StreamsConfig config) {
 		Objects.requireNonNull(config, "config can't be null");
 
 		// set application id
@@ -553,20 +559,6 @@ public class InternalTopologyBuilder {
 		return topicStore.nodeGroups();
 	}
 
-	private int putNodeGroupName(final String nodeName, final int nodeGroupId,
-			final Map<Integer, Set<String>> nodeGroups, final Map<String, Set<String>> rootToNodeGroup) {
-		int newNodeGroupId = nodeGroupId;
-		final String root = nodeGrouper.root(nodeName);
-		Set<String> nodeGroup = rootToNodeGroup.get(root);
-		if (nodeGroup == null) {
-			nodeGroup = new HashSet<>();
-			rootToNodeGroup.put(root, nodeGroup);
-			nodeGroups.put(newNodeGroupId++, nodeGroup);
-		}
-		nodeGroup.add(nodeName);
-		return newNodeGroupId;
-	}
-
 	public synchronized ProcessorTopology build() {
 		return build((Integer) null);
 	}
@@ -654,27 +646,7 @@ public class InternalTopologyBuilder {
 	private Pattern resetTopicsPattern(final Set<String> resetTopics, final Set<Pattern> resetPatterns) {
 		final List<String> topics = topicStore.maybeDecorateInternalSourceTopics(resetTopics);
 
-		return buildPatternForOffsetResetTopics(topics, resetPatterns);
-	}
-
-	private static Pattern buildPatternForOffsetResetTopics(final Collection<String> sourceTopics,
-			final Collection<Pattern> sourcePatterns) {
-		final StringBuilder builder = new StringBuilder();
-
-		for (final String topic : sourceTopics) {
-			builder.append(topic).append("|");
-		}
-
-		for (final Pattern sourcePattern : sourcePatterns) {
-			builder.append(sourcePattern.pattern()).append("|");
-		}
-
-		if (builder.length() > 0) {
-			builder.setLength(builder.length() - 1);
-			return Pattern.compile(builder.toString());
-		}
-
-		return EMPTY_ZERO_LENGTH_PATTERN;
+		return Refac_TopicStore.buildPatternForOffsetResetTopics(topics, resetPatterns);
 	}
 
 	public Map<String, List<String>> stateStoreNameToSourceTopics() {
@@ -760,8 +732,6 @@ public class InternalTopologyBuilder {
 			}
 		}
 	}
-
-	private final static NodeComparator NODE_COMPARATOR = new NodeComparator();
 
 	private static void updateSize(final AbstractNode node, final int delta) {
 		node.size += delta;
@@ -1158,8 +1128,6 @@ public class InternalTopologyBuilder {
 		}
 	}
 
-	private final static GlobalStoreComparator GLOBALSTORE_COMPARATOR = new GlobalStoreComparator();
-
 	private static class SubtopologyComparator implements Comparator<TopologyDescription.Subtopology>, Serializable {
 		@Override
 		public int compare(final TopologyDescription.Subtopology subtopology1,
@@ -1167,8 +1135,6 @@ public class InternalTopologyBuilder {
 			return subtopology1.id() - subtopology2.id();
 		}
 	}
-
-	private final static SubtopologyComparator SUBTOPOLOGY_COMPARATOR = new SubtopologyComparator();
 
 	public final static class TopologyDescription implements org.apache.kafka.streams.TopologyDescription {
 		private final TreeSet<TopologyDescription.Subtopology> subtopologies = new TreeSet<>(SUBTOPOLOGY_COMPARATOR);
