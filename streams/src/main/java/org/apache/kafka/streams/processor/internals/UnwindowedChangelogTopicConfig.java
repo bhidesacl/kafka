@@ -35,7 +35,7 @@ public class UnwindowedChangelogTopicConfig extends InternalTopicConfig {
         UNWINDOWED_STORE_CHANGELOG_TOPIC_DEFAULT_OVERRIDES = Collections.unmodifiableMap(tempTopicDefaultOverrides);
     }
 
-    UnwindowedChangelogTopicConfig(final String name, final Map<String, String> topicConfigs) {
+    public UnwindowedChangelogTopicConfig(final String name, final Map<String, String> topicConfigs) {
         super(name, topicConfigs);
     }
 

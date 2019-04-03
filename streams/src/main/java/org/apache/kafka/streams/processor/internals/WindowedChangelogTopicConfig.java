@@ -37,7 +37,7 @@ public class WindowedChangelogTopicConfig extends InternalTopicConfig {
 
     private Long retentionMs;
 
-    WindowedChangelogTopicConfig(final String name, final Map<String, String> topicConfigs) {
+    public WindowedChangelogTopicConfig(final String name, final Map<String, String> topicConfigs) {
         super(name, topicConfigs);
     }
 
@@ -69,7 +69,7 @@ public class WindowedChangelogTopicConfig extends InternalTopicConfig {
         return topicConfig;
     }
 
-    void setRetentionMs(final long retentionMs) {
+    public void setRetentionMs(final long retentionMs) {
         if (!topicConfigs.containsKey(TopicConfig.RETENTION_MS_CONFIG)) {
             this.retentionMs = retentionMs;
         }
