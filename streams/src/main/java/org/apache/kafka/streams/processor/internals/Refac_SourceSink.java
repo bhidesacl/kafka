@@ -14,9 +14,9 @@ import java.util.regex.Pattern;
 
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.GlobalStore;
-import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.NodeFactory;
-import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.ProcessorNodeFactory;
-import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.SourceNodeFactory;
+import org.apache.kafka.streams.processor.internals.nf.NodeFactory;
+import org.apache.kafka.streams.processor.internals.nf.ProcessorNodeFactory;
+import org.apache.kafka.streams.processor.internals.nf.SourceNodeFactory;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.SubscriptionUpdates;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.TopologyDescription;
 
@@ -200,7 +200,7 @@ public class Refac_SourceSink {
 		}
 		return false;
 	}
-	
+
 	public void connectStateStoreNameToSourceTopicsOrPattern(Map<String, NodeFactory> nodeFactories,
 			final String stateStoreName, final ProcessorNodeFactory processorNodeFactory) {
 // we should never update the mapping from state store names to source topics if the store name already exists
@@ -215,7 +215,7 @@ public class Refac_SourceSink {
 		final Set<String> sourceTopics = new HashSet<>();
 		final Set<Pattern> sourcePatterns = new HashSet<>();
 		final Set<SourceNodeFactory> sourceNodesForPredecessor = findSourcesForProcessorPredecessors(nodeFactories,
-				processorNodeFactory.predecessors);
+				processorNodeFactory.getPredecessors());
 
 		for (final SourceNodeFactory sourceNodeFactory : sourceNodesForPredecessor) {
 			if (sourceNodeFactory.getPattern() != null) {
@@ -234,7 +234,7 @@ public class Refac_SourceSink {
 		}
 
 	}
-	
+
 	private Set<SourceNodeFactory> findSourcesForProcessorPredecessors(Map<String, NodeFactory> nodeFactories,
 			final String[] predecessors) {
 		final Set<SourceNodeFactory> sourceNodes = new HashSet<>();
@@ -244,12 +244,12 @@ public class Refac_SourceSink {
 				sourceNodes.add((SourceNodeFactory) nodeFactory);
 			} else if (nodeFactory instanceof ProcessorNodeFactory) {
 				sourceNodes.addAll(findSourcesForProcessorPredecessors(nodeFactories,
-						((ProcessorNodeFactory) nodeFactory).predecessors));
+						((ProcessorNodeFactory) nodeFactory).getPredecessors()));
 			}
 		}
 		return sourceNodes;
 	}
-	
+
 	public Map<Integer, Set<String>> makeNodeGroups() {
 		final Map<Integer, Set<String>> nodeGroups = new LinkedHashMap<>();
 		final Map<String, Set<String>> rootToNodeGroup = new HashMap<>();
@@ -274,7 +274,7 @@ public class Refac_SourceSink {
 
 		return nodeGroups;
 	}
-	
+
 	private int putNodeGroupName(final String nodeName, final int nodeGroupId,
 			final Map<Integer, Set<String>> nodeGroups, final Map<String, Set<String>> rootToNodeGroup) {
 		int newNodeGroupId = nodeGroupId;

@@ -16,10 +16,10 @@ import java.util.regex.Pattern;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.errors.TopologyException;
 import org.apache.kafka.streams.processor.StateStore;
-import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.NodeFactory;
-import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.ProcessorNodeFactory;
-import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.SinkNodeFactory;
-import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.SourceNodeFactory;
+import org.apache.kafka.streams.processor.internals.nf.NodeFactory;
+import org.apache.kafka.streams.processor.internals.nf.ProcessorNodeFactory;
+import org.apache.kafka.streams.processor.internals.nf.SinkNodeFactory;
+import org.apache.kafka.streams.processor.internals.nf.SourceNodeFactory;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.SubscriptionUpdates;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.TopicsInfo;
 import org.apache.kafka.streams.state.StoreBuilder;
@@ -46,11 +46,14 @@ public class Refac_TopicStore {
 	private Refac_SourceSink sourceSink;
 	private Refac_GlobalTopics globalTopics;
 	private String applicationId;
+	private QuickUnion<String> nodeGrouper;
+	private Map<String, NodeFactory> nodeFactories;
 
-	public Refac_TopicStore(Refac_SourceSink sourceSink,
-			Refac_GlobalTopics globalTopics) {
+	public Refac_TopicStore(Refac_SourceSink sourceSink, Refac_GlobalTopics globalTopics, QuickUnion<String> nodeGrouper, Map<String, NodeFactory> nodeFactories) {
 		this.sourceSink = sourceSink;
 		this.globalTopics = globalTopics;
+		this.nodeGrouper = nodeGrouper;
+		this.nodeFactories = nodeFactories;
 	}
 
 	public boolean containsTopic(String topicName) {
@@ -71,7 +74,7 @@ public class Refac_TopicStore {
 		}
 		return nodeGroups;
 	}
-	
+
 	public Map<String, StateStoreFactory> getStateFactories() {
 		return stateFactories;
 	}
@@ -209,7 +212,7 @@ public class Refac_TopicStore {
 		// topologically sorted)
 		// also make sure the state store map values following the insertion ordering
 		for (final NodeFactory factory : nodeFactories.values()) {
-			if (nodeGroup == null || nodeGroup.contains(factory.name)) {
+			if (nodeGroup == null || nodeGroup.contains(factory.getName())) {
 				final ProcessorNode node = factory.build();
 				processorMap.put(node.name(), node);
 
@@ -237,7 +240,7 @@ public class Refac_TopicStore {
 	private void buildProcessorNode(final Map<String, ProcessorNode> processorMap,
 			final Map<String, StateStore> stateStoreMap, final ProcessorNodeFactory factory, final ProcessorNode node) {
 
-		for (final String predecessor : factory.predecessors) {
+		for (final String predecessor : factory.getPredecessors()) {
 			final ProcessorNode<?, ?> predecessorNode = processorMap.get(predecessor);
 			predecessorNode.addChild(node);
 		}
@@ -282,7 +285,7 @@ public class Refac_TopicStore {
 	private void buildSinkNode(final Map<String, ProcessorNode> processorMap, final Map<String, SinkNode> topicSinkMap,
 			final Set<String> repartitionTopics, final SinkNodeFactory sinkNodeFactory, final SinkNode node) {
 
-		for (final String predecessor : sinkNodeFactory.predecessors) {
+		for (final String predecessor : sinkNodeFactory.getPredecessors()) {
 			processorMap.get(predecessor).addChild(node);
 			if (sinkNodeFactory.getTopicExtractor() instanceof StaticTopicNameExtractor) {
 				final String topic = ((StaticTopicNameExtractor) sinkNodeFactory.getTopicExtractor()).topicName;
@@ -320,6 +323,19 @@ public class Refac_TopicStore {
 
 		return applicationId + "-" + topic;
 	}
+	
+	public final void connectProcessorAndStateStores(final String processorName, final String... stateStoreNames) {
+		Objects.requireNonNull(processorName, "processorName can't be null");
+		Objects.requireNonNull(stateStoreNames, "state store list must not be null");
+		if (stateStoreNames.length == 0) {
+			throw new TopologyException("Must provide at least one state store name.");
+		}
+		for (final String stateStoreName : stateStoreNames) {
+			Objects.requireNonNull(stateStoreName, "state store name must not be null");
+			connectProcessorAndStateStore(nodeGrouper, nodeFactories, processorName, stateStoreName);
+		}
+		setNodeGroups(null);
+	}
 
 	public void connectSourceStoreAndTopic(final String sourceStoreName, final String topic) {
 		if (storeToChangelogTopic.containsKey(sourceStoreName)) {
@@ -353,7 +369,8 @@ public class Refac_TopicStore {
 		if (nodeFactory instanceof ProcessorNodeFactory) {
 			final ProcessorNodeFactory processorNodeFactory = (ProcessorNodeFactory) nodeFactory;
 			processorNodeFactory.addStateStore(stateStoreName);
-			sourceSink.connectStateStoreNameToSourceTopicsOrPattern(nodeFactories, stateStoreName, processorNodeFactory);
+			sourceSink.connectStateStoreNameToSourceTopicsOrPattern(nodeFactories, stateStoreName,
+					processorNodeFactory);
 		} else {
 			throw new TopologyException(
 					"cannot connect a state store " + stateStoreName + " to a source node or a sink node.");
@@ -459,6 +476,6 @@ public class Refac_TopicStore {
 	}
 
 	public void setApplicationId(String applicationId) {
-		this.applicationId = applicationId;		
+		this.applicationId = applicationId;
 	}
 }

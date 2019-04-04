@@ -31,7 +31,7 @@ public class SinkNode<K, V> extends ProcessorNode<K, V> {
 
     private InternalProcessorContext context;
 
-    SinkNode(final String name,
+    public SinkNode(final String name,
              final TopicNameExtractor<K, V> topicExtractor,
              final Serializer<K> keySerializer,
              final Serializer<V> valSerializer,
