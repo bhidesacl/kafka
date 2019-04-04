@@ -43,11 +43,11 @@ public class Refac_TopicStore {
 	// is passed through on source node
 	// even if it can be matched by multiple regex patterns
 	private final Map<String, Pattern> topicToPatterns = new HashMap<>();
-	private Refac_SourceSink sourceSink;
-	private Refac_GlobalTopics globalTopics;
+	private final Refac_SourceSink sourceSink;
+	private final Refac_GlobalTopics globalTopics;
 	private String applicationId;
-	private QuickUnion<String> nodeGrouper;
-	private Map<String, NodeFactory> nodeFactories;
+	private final QuickUnion<String> nodeGrouper;
+	private final Map<String, NodeFactory> nodeFactories;
 
 	public Refac_TopicStore(Refac_SourceSink sourceSink, Refac_GlobalTopics globalTopics, QuickUnion<String> nodeGrouper, Map<String, NodeFactory> nodeFactories) {
 		this.sourceSink = sourceSink;

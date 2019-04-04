@@ -20,7 +20,6 @@ import java.io.Serializable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -35,7 +34,6 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.Topology;
-import org.apache.kafka.streams.errors.TopologyException;
 import org.apache.kafka.streams.processor.ProcessorSupplier;
 import org.apache.kafka.streams.processor.StateStore;
 import org.apache.kafka.streams.processor.StreamPartitioner;
@@ -60,6 +58,8 @@ public class InternalTopologyBuilder {
 	private final Refac_SourceSink sourceSink;
 
 	private final Refac_TopicPatterns topicPatterns;
+	
+	private final Refac_ToplogyDescriptionGen topoGen;
 
 	private final Refac_GlobalTopics globalTopics = new Refac_GlobalTopics();
 
@@ -81,6 +81,7 @@ public class InternalTopologyBuilder {
 		this.sourceSink = new Refac_SourceSink(nodeFactories, subscriptionUpdates, globalTopics, nodeGrouper);
 		this.topicStore = new Refac_TopicStore(sourceSink, globalTopics, nodeGrouper, nodeFactories);
 		this.topicPatterns = new Refac_TopicPatterns(nodeFactories, sourceSink, nodeGrouper, topicStore, globalTopics);
+		this.topoGen = new Refac_ToplogyDescriptionGen(topicStore, sourceSink, nodeFactories, globalTopics);
 	}
 
 	// public for testing only
@@ -119,17 +120,8 @@ public class InternalTopologyBuilder {
 	public final <K, V> void addSink(final String name, final String topic, final Serializer<K> keySerializer,
 			final Serializer<V> valSerializer, final StreamPartitioner<? super K, ? super V> partitioner,
 			final String... predecessorNames) {
-		Objects.requireNonNull(name, "name must not be null");
-		Objects.requireNonNull(topic, "topic must not be null");
-		Objects.requireNonNull(predecessorNames, "predecessor names must not be null");
-		if (predecessorNames.length == 0) {
-			throw new TopologyException("Sink " + name + " must have at least one parent");
-		}
-
-		addSink(name, new StaticTopicNameExtractor<>(topic), keySerializer, valSerializer, partitioner,
-				predecessorNames);
-		sourceSink.addSinkTopicToNode(name, topic);
-		topicStore.setNodeGroups(null);
+		
+		topicPatterns.addSink(name, topic, keySerializer, valSerializer, partitioner, predecessorNames);
 	}
 
 	public final <K, V> void addSink(final String name, final TopicNameExtractor<K, V> topicExtractor,
@@ -305,30 +297,7 @@ public class InternalTopologyBuilder {
 	}
 
 	public TopologyDescription describe() {
-		final TopologyDescription description = new TopologyDescription();
-
-		for (final Map.Entry<Integer, Set<String>> nodeGroup : topicStore.nodeGroups().entrySet()) {
-
-			final Set<String> allNodesOfGroups = nodeGroup.getValue();
-			final boolean isNodeGroupOfGlobalStores = nodeGroupContainsGlobalSourceNode(allNodesOfGroups);
-
-			if (!isNodeGroupOfGlobalStores) {
-				describeSubtopology(description, nodeGroup.getKey(), allNodesOfGroups);
-			} else {
-				sourceSink.describeGlobalStore(description, allNodesOfGroups, nodeGroup.getKey());
-			}
-		}
-
-		return description;
-	}
-
-	private boolean nodeGroupContainsGlobalSourceNode(final Set<String> allNodesOfGroups) {
-		for (final String node : allNodesOfGroups) {
-			if (isGlobalSource(node)) {
-				return true;
-			}
-		}
-		return false;
+		return topoGen.describe();
 	}
 
 	private static class NodeComparator implements Comparator<TopologyDescription.Node>, Serializable {
@@ -347,37 +316,6 @@ public class InternalTopologyBuilder {
 				return node1.name().compareTo(node2.name());
 			}
 		}
-	}
-
-	private static void updateSize(final AbstractNode node, final int delta) {
-		node.size += delta;
-
-		for (final TopologyDescription.Node predecessor : node.predecessors()) {
-			updateSize((AbstractNode) predecessor, delta);
-		}
-	}
-
-	private void describeSubtopology(final TopologyDescription description, final Integer subtopologyId,
-			final Set<String> nodeNames) {
-
-		final Map<String, AbstractNode> nodesByName = new HashMap<>();
-
-		// add all nodes
-		for (final String nodeName : nodeNames) {
-			nodesByName.put(nodeName, nodeFactories.get(nodeName).describe());
-		}
-
-		// connect each node to its predecessors and successors
-		for (final AbstractNode node : nodesByName.values()) {
-			for (final String predecessorName : nodeFactories.get(node.name()).getPredecessors()) {
-				final AbstractNode predecessor = nodesByName.get(predecessorName);
-				node.addPredecessor(predecessor);
-				predecessor.addSuccessor(node);
-				updateSize(predecessor, node.size);
-			}
-		}
-
-		description.addSubtopology(new Subtopology(subtopologyId, new HashSet<>(nodesByName.values())));
 	}
 
 	public final static class GlobalStore implements TopologyDescription.GlobalStore {

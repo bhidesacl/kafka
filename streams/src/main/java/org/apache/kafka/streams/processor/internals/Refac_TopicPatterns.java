@@ -84,6 +84,22 @@ public class Refac_TopicPatterns {
 		return sourceTopicNames;
 	}
 	
+	public final <K, V> void addSink(final String name, final String topic, final Serializer<K> keySerializer,
+			final Serializer<V> valSerializer, final StreamPartitioner<? super K, ? super V> partitioner,
+			final String... predecessorNames) {
+		Objects.requireNonNull(name, "name must not be null");
+		Objects.requireNonNull(topic, "topic must not be null");
+		Objects.requireNonNull(predecessorNames, "predecessor names must not be null");
+		if (predecessorNames.length == 0) {
+			throw new TopologyException("Sink " + name + " must have at least one parent");
+		}
+
+		addSink(name, new StaticTopicNameExtractor<>(topic), keySerializer, valSerializer, partitioner,
+				predecessorNames);
+		sourceSink.addSinkTopicToNode(name, topic);
+		topicStore.setNodeGroups(null);
+	}
+	
 	public final <K, V> void addSink(final String name, final TopicNameExtractor<K, V> topicExtractor,
 			final Serializer<K> keySerializer, final Serializer<V> valSerializer,
 			final StreamPartitioner<? super K, ? super V> partitioner, final String... predecessorNames) {
