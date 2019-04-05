@@ -18,11 +18,11 @@ import org.apache.kafka.streams.processor.internals.nf.SinkNodeFactory;
 import org.apache.kafka.streams.processor.internals.nf.SourceNodeFactory;
 
 public class Refac_NodeBuilder {
-	private Map<String, StateStore> globalStateStores;
-	private Map<String, String> storeToChangelogTopic;
-	private Map<String, StateStoreFactory> stateFactories;
+	private final Map<String, StateStore> globalStateStores;
+	private final Map<String, String> storeToChangelogTopic;
+	private final Map<String, StateStoreFactory> stateFactories;
 	private String applicationId;
-	private Set<String> internalTopicNames;
+	private final Set<String> internalTopicNames;
 
 	public Refac_NodeBuilder(Map<String, StateStore> globalStateStores, Map<String, String> storeToChangelogTopic,
 			Map<String, StateStoreFactory> stateFactories, Set<String> internalTopicNames) {

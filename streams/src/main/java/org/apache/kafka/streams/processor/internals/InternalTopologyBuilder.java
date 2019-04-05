@@ -59,7 +59,7 @@ public class InternalTopologyBuilder {
 
 	private final Refac_TopicPatterns topicPatterns;
 	
-	private final Refac_ToplogyDescriptionGen topoGen;
+	private final Refac_TopologyDescriptionGen topoGen;
 
 	private final Refac_GlobalTopics globalTopics = new Refac_GlobalTopics();
 
@@ -81,7 +81,7 @@ public class InternalTopologyBuilder {
 		this.sourceSink = new Refac_SourceSink(nodeFactories, subscriptionUpdates, globalTopics, nodeGrouper);
 		this.topicStore = new Refac_TopicStore(sourceSink, globalTopics, nodeGrouper, nodeFactories);
 		this.topicPatterns = new Refac_TopicPatterns(nodeFactories, sourceSink, nodeGrouper, topicStore, globalTopics);
-		this.topoGen = new Refac_ToplogyDescriptionGen(topicStore, sourceSink, nodeFactories, globalTopics);
+		this.topoGen = new Refac_TopologyDescriptionGen(topicStore, sourceSink, nodeFactories, globalTopics);
 	}
 
 	// public for testing only

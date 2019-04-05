@@ -110,7 +110,7 @@ public class Refac_TopicStore implements ITopicStore {
 		setNodeGroups(null);
 	}
 
-	public synchronized final void rewriteTopology(final StreamsConfig config) {
+	public final void rewriteTopology(final StreamsConfig config) {
 		// maybe strip out caching layers
 		if (config.getLong(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_CONFIG) == 0L) {
 			for (final StateStoreFactory storeFactory : stateFactories.values()) {
@@ -133,7 +133,7 @@ public class Refac_TopicStore implements ITopicStore {
 		internalTopicNames.add(topicName);
 	}
 
-	public synchronized Map<Integer, TopicsInfo> topicGroups() {
+	public Map<Integer, TopicsInfo> topicGroups() {
 		final Map<Integer, TopicsInfo> topicGroups = new LinkedHashMap<>();
 
 		if (nodeGroups == null) {
