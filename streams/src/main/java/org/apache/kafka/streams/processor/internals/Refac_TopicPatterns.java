@@ -55,33 +55,61 @@ public class Refac_TopicPatterns {
 		this.globalTopics = globalTopics;
 	}
 
-	public final void addSource(final Topology.AutoOffsetReset offsetReset, final String name,
+	public final void addGlobalStore(final StoreBuilder storeBuilder, final String sourceName,
 			final TimestampExtractor timestampExtractor, final Deserializer keyDeserializer,
-			final Deserializer valDeserializer, final String... topics) {
-		if (topics.length == 0) {
-			throw new TopologyException("You must provide at least one topic");
-		}
-		Objects.requireNonNull(name, "name must not be null");
-		if (nodeFactories.containsKey(name)) {
-			throw new TopologyException("Processor " + name + " is already added.");
-		}
+			final Deserializer valueDeserializer, final String topic, final String processorName,
+			final ProcessorSupplier stateUpdateSupplier) {
+		Objects.requireNonNull(storeBuilder, "store builder must not be null");
+		validateGlobalStoreArguments(sourceName, topic, processorName, stateUpdateSupplier, storeBuilder.name(),
+				storeBuilder.loggingEnabled());
+		validateTopicNotAlreadyRegistered(topic);
 
-		for (final String topic : topics) {
-			Objects.requireNonNull(topic, "topic names cannot be null");
-			validateTopicNotAlreadyRegistered(topic);
-			maybeAddToResetList(earliestResetTopics, latestResetTopics, offsetReset, topic);
-			sourceTopicNames.add(topic);
-		}
+		final String[] topics = { topic };
+		final String[] predecessors = { sourceName };
 
-		nodeFactories.put(name, new SourceNodeFactory(name, topics, null, timestampExtractor, keyDeserializer,
-				valDeserializer, topicStore, sourceSink));
-		sourceSink.addSourceTopicsToNode(name, Arrays.asList(topics));
-		nodeGrouper.add(name);
+		final ProcessorNodeFactory nodeFactory = new ProcessorNodeFactory(processorName, predecessors,
+				stateUpdateSupplier);
+
+		globalTopics.add(topic);
+		nodeFactories.put(sourceName, new SourceNodeFactory(sourceName, topics, null, timestampExtractor,
+				keyDeserializer, valueDeserializer, topicStore, sourceSink));
+		sourceSink.addSourceTopicsToNode(sourceName, Arrays.asList(topics));
+		nodeGrouper.add(sourceName);
+		nodeFactory.addStateStore(storeBuilder.name());
+		nodeFactories.put(processorName, nodeFactory);
+		nodeGrouper.add(processorName);
+		nodeGrouper.unite(processorName, predecessors);
+		topicStore.addToGlobalStateBuilder(storeBuilder);
+		topicStore.connectSourceStoreAndTopic(storeBuilder.name(), topic);
 		topicStore.setNodeGroups(null);
 	}
 	
-	public Set<String> getSourceTopicNames() {
-		return sourceTopicNames;
+	public final void addProcessor(final String name, final ProcessorSupplier supplier,
+			final String... predecessorNames) {
+		Objects.requireNonNull(name, "name must not be null");
+		Objects.requireNonNull(supplier, "supplier must not be null");
+		Objects.requireNonNull(predecessorNames, "predecessor names must not be null");
+		if (nodeFactories.containsKey(name)) {
+			throw new TopologyException("Processor " + name + " is already added.");
+		}
+		if (predecessorNames.length == 0) {
+			throw new TopologyException("Processor " + name + " must have at least one parent");
+		}
+
+		for (final String predecessor : predecessorNames) {
+			Objects.requireNonNull(predecessor, "predecessor name must not be null");
+			if (predecessor.equals(name)) {
+				throw new TopologyException("Processor " + name + " cannot be a predecessor of itself.");
+			}
+			if (!nodeFactories.containsKey(predecessor)) {
+				throw new TopologyException("Predecessor processor " + predecessor + " is not added yet for " + name);
+			}
+		}
+
+		nodeFactories.put(name, new ProcessorNodeFactory(name, predecessorNames, supplier));
+		nodeGrouper.add(name);
+		nodeGrouper.unite(name, predecessorNames);
+		topicStore.setNodeGroups(null);
 	}
 	
 	public final <K, V> void addSink(final String name, final String topic, final Serializer<K> keySerializer,
@@ -175,101 +203,43 @@ public class Refac_TopicPatterns {
 		topicStore.setNodeGroups(null);
 	}
 
+	public final void addSource(final Topology.AutoOffsetReset offsetReset, final String name,
+			final TimestampExtractor timestampExtractor, final Deserializer keyDeserializer,
+			final Deserializer valDeserializer, final String... topics) {
+		if (topics.length == 0) {
+			throw new TopologyException("You must provide at least one topic");
+		}
+		Objects.requireNonNull(name, "name must not be null");
+		if (nodeFactories.containsKey(name)) {
+			throw new TopologyException("Processor " + name + " is already added.");
+		}
+
+		for (final String topic : topics) {
+			Objects.requireNonNull(topic, "topic names cannot be null");
+			validateTopicNotAlreadyRegistered(topic);
+			maybeAddToResetList(earliestResetTopics, latestResetTopics, offsetReset, topic);
+			sourceTopicNames.add(topic);
+		}
+
+		nodeFactories.put(name, new SourceNodeFactory(name, topics, null, timestampExtractor, keyDeserializer,
+				valDeserializer, topicStore, sourceSink));
+		sourceSink.addSourceTopicsToNode(name, Arrays.asList(topics));
+		nodeGrouper.add(name);
+		topicStore.setNodeGroups(null);
+	}
+	
 	public Pattern earliestResetTopicsPattern() {
 		return resetTopicsPattern(earliestResetTopics, earliestResetPatterns);
 	}
 	
-	public final void addProcessor(final String name, final ProcessorSupplier supplier,
-			final String... predecessorNames) {
-		Objects.requireNonNull(name, "name must not be null");
-		Objects.requireNonNull(supplier, "supplier must not be null");
-		Objects.requireNonNull(predecessorNames, "predecessor names must not be null");
-		if (nodeFactories.containsKey(name)) {
-			throw new TopologyException("Processor " + name + " is already added.");
-		}
-		if (predecessorNames.length == 0) {
-			throw new TopologyException("Processor " + name + " must have at least one parent");
-		}
-
-		for (final String predecessor : predecessorNames) {
-			Objects.requireNonNull(predecessor, "predecessor name must not be null");
-			if (predecessor.equals(name)) {
-				throw new TopologyException("Processor " + name + " cannot be a predecessor of itself.");
-			}
-			if (!nodeFactories.containsKey(predecessor)) {
-				throw new TopologyException("Predecessor processor " + predecessor + " is not added yet for " + name);
-			}
-		}
-
-		nodeFactories.put(name, new ProcessorNodeFactory(name, predecessorNames, supplier));
-		nodeGrouper.add(name);
-		nodeGrouper.unite(name, predecessorNames);
-		topicStore.setNodeGroups(null);
-	}
-	
-	public final void addGlobalStore(final StoreBuilder storeBuilder, final String sourceName,
-			final TimestampExtractor timestampExtractor, final Deserializer keyDeserializer,
-			final Deserializer valueDeserializer, final String topic, final String processorName,
-			final ProcessorSupplier stateUpdateSupplier) {
-		Objects.requireNonNull(storeBuilder, "store builder must not be null");
-		validateGlobalStoreArguments(sourceName, topic, processorName, stateUpdateSupplier, storeBuilder.name(),
-				storeBuilder.loggingEnabled());
-		validateTopicNotAlreadyRegistered(topic);
-
-		final String[] topics = { topic };
-		final String[] predecessors = { sourceName };
-
-		final ProcessorNodeFactory nodeFactory = new ProcessorNodeFactory(processorName, predecessors,
-				stateUpdateSupplier);
-
-		globalTopics.add(topic);
-		nodeFactories.put(sourceName, new SourceNodeFactory(sourceName, topics, null, timestampExtractor,
-				keyDeserializer, valueDeserializer, topicStore, sourceSink));
-		sourceSink.addSourceTopicsToNode(sourceName, Arrays.asList(topics));
-		nodeGrouper.add(sourceName);
-		nodeFactory.addStateStore(storeBuilder.name());
-		nodeFactories.put(processorName, nodeFactory);
-		nodeGrouper.add(processorName);
-		nodeGrouper.unite(processorName, predecessors);
-		topicStore.addToGlobalStateBuilder(storeBuilder);
-		topicStore.connectSourceStoreAndTopic(storeBuilder.name(), topic);
-		topicStore.setNodeGroups(null);
-	}
-	
-	private void validateGlobalStoreArguments(final String sourceName, final String topic, final String processorName,
-			final ProcessorSupplier stateUpdateSupplier, final String storeName, final boolean loggingEnabled) {
-		Objects.requireNonNull(sourceName, "sourceName must not be null");
-		Objects.requireNonNull(topic, "topic must not be null");
-		Objects.requireNonNull(stateUpdateSupplier, "supplier must not be null");
-		Objects.requireNonNull(processorName, "processorName must not be null");
-		if (nodeFactories.containsKey(sourceName)) {
-			throw new TopologyException("Processor " + sourceName + " is already added.");
-		}
-		if (nodeFactories.containsKey(processorName)) {
-			throw new TopologyException("Processor " + processorName + " is already added.");
-		}
-
-		if (!topicStore.validateStoreName(storeName)) {
-			throw new TopologyException("StateStore " + storeName + " is already added.");
-		}
-		if (loggingEnabled) {
-			throw new TopologyException("StateStore " + storeName + " for global table must not have logging enabled.");
-		}
-		if (sourceName.equals(processorName)) {
-			throw new TopologyException("sourceName and processorName must be different.");
-		}
+	public Set<String> getSourceTopicNames() {
+		return sourceTopicNames;
 	}
 	
 	public Pattern latestResetTopicsPattern() {
 		return resetTopicsPattern(latestResetTopics, latestResetPatterns);
 	}
-
-	private Pattern resetTopicsPattern(final Set<String> resetTopics, final Set<Pattern> resetPatterns) {
-		final List<String> topics = topicStore.decorateInternalSourceTopics(resetTopics);
-
-		return Refac_TopicHelper.buildPatternForOffsetResetTopics(topics, resetPatterns);
-	}
-
+	
 	public void validateTopicNotAlreadyRegistered(final String topic) {
 		if (sourceTopicNames.contains(topic) || globalTopics.contains(topic)) {
 			throw new TopologyException("Topic " + topic + " has already been registered by another source.");
@@ -293,6 +263,36 @@ public class Refac_TopicPatterns {
 			default:
 				throw new TopologyException(String.format("Unrecognized reset format %s", offsetReset));
 			}
+		}
+	}
+
+	private Pattern resetTopicsPattern(final Set<String> resetTopics, final Set<Pattern> resetPatterns) {
+		final List<String> topics = topicStore.decorateInternalSourceTopics(resetTopics);
+
+		return Refac_TopicHelper.buildPatternForOffsetResetTopics(topics, resetPatterns);
+	}
+
+	private void validateGlobalStoreArguments(final String sourceName, final String topic, final String processorName,
+			final ProcessorSupplier stateUpdateSupplier, final String storeName, final boolean loggingEnabled) {
+		Objects.requireNonNull(sourceName, "sourceName must not be null");
+		Objects.requireNonNull(topic, "topic must not be null");
+		Objects.requireNonNull(stateUpdateSupplier, "supplier must not be null");
+		Objects.requireNonNull(processorName, "processorName must not be null");
+		if (nodeFactories.containsKey(sourceName)) {
+			throw new TopologyException("Processor " + sourceName + " is already added.");
+		}
+		if (nodeFactories.containsKey(processorName)) {
+			throw new TopologyException("Processor " + processorName + " is already added.");
+		}
+
+		if (!topicStore.validateStoreName(storeName)) {
+			throw new TopologyException("StateStore " + storeName + " is already added.");
+		}
+		if (loggingEnabled) {
+			throw new TopologyException("StateStore " + storeName + " for global table must not have logging enabled.");
+		}
+		if (sourceName.equals(processorName)) {
+			throw new TopologyException("sourceName and processorName must be different.");
 		}
 	}
 

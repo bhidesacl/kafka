@@ -69,6 +69,20 @@ public class Refac_NodeBuilder {
 				storeToChangelogTopic, repartitionTopics);
 	}
 
+	public String decorateTopic(final String topic) {
+		if (applicationId == null) {
+			throw new TopologyException("there are internal topics and " + "applicationId hasn't been set. Call "
+					+ "setApplicationId first");
+		}
+
+		return applicationId + "-" + topic;
+	}
+
+	public void setApplicationId(String applicationId) {
+		this.applicationId = applicationId;
+		
+	}
+
 	private void buildProcessorNode(final Map<String, ProcessorNode> processorMap,
 			final Map<String, StateStore> stateStoreMap, final ProcessorNodeFactory factory, final ProcessorNode node) {
 
@@ -95,25 +109,6 @@ public class Refac_NodeBuilder {
 		}
 	}
 
-	private void buildSourceNode(SubscriptionUpdates subscriptionUpdates, final Map<String, SourceNode> topicSourceMap,
-			final Set<String> repartitionTopics, final SourceNodeFactory sourceNodeFactory, final SourceNode node) {
-
-		final List<String> topics = (sourceNodeFactory.getPattern() != null)
-				? sourceNodeFactory.getTopics(subscriptionUpdates.getUpdates())
-				: sourceNodeFactory.getTopics();
-
-		for (final String topic : topics) {
-			if (internalTopicNames.contains(topic)) {
-// prefix the internal topic name with the application id
-				final String decoratedTopic = decorateTopic(topic);
-				topicSourceMap.put(decoratedTopic, node);
-				repartitionTopics.add(decoratedTopic);
-			} else {
-				topicSourceMap.put(topic, node);
-			}
-		}
-	}
-
 	private void buildSinkNode(final Map<String, ProcessorNode> processorMap, final Map<String, SinkNode> topicSinkMap,
 			final Set<String> repartitionTopics, final SinkNodeFactory sinkNodeFactory, final SinkNode node) {
 
@@ -134,17 +129,22 @@ public class Refac_NodeBuilder {
 		}
 	}
 
-	public String decorateTopic(final String topic) {
-		if (applicationId == null) {
-			throw new TopologyException("there are internal topics and " + "applicationId hasn't been set. Call "
-					+ "setApplicationId first");
+	private void buildSourceNode(SubscriptionUpdates subscriptionUpdates, final Map<String, SourceNode> topicSourceMap,
+			final Set<String> repartitionTopics, final SourceNodeFactory sourceNodeFactory, final SourceNode node) {
+
+		final List<String> topics = (sourceNodeFactory.getPattern() != null)
+				? sourceNodeFactory.getTopics(subscriptionUpdates.getUpdates())
+				: sourceNodeFactory.getTopics();
+
+		for (final String topic : topics) {
+			if (internalTopicNames.contains(topic)) {
+// prefix the internal topic name with the application id
+				final String decoratedTopic = decorateTopic(topic);
+				topicSourceMap.put(decoratedTopic, node);
+				repartitionTopics.add(decoratedTopic);
+			} else {
+				topicSourceMap.put(topic, node);
+			}
 		}
-
-		return applicationId + "-" + topic;
-	}
-
-	public void setApplicationId(String applicationId) {
-		this.applicationId = applicationId;
-		
 	}
 }

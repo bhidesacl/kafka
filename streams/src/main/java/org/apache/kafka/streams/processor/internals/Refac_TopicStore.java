@@ -25,16 +25,67 @@ import org.apache.kafka.streams.state.internals.TimestampedWindowStoreBuilder;
 import org.apache.kafka.streams.state.internals.WindowStoreBuilder;
 
 public class Refac_TopicStore implements ITopicStore {
+	static class StateStoreFactory {
+		private final StoreBuilder builder;
+		private final Set<String> users = new HashSet<>();
+
+		private StateStoreFactory(final StoreBuilder<?> builder) {
+			this.builder = builder;
+		}
+
+		public StateStore build() {
+			return builder.build();
+		}
+
+		public boolean isWindowStore() {
+			return builder instanceof WindowStoreBuilder || builder instanceof TimestampedWindowStoreBuilder
+					|| builder instanceof SessionStoreBuilder;
+		}
+
+		// Apparently Java strips the generics from this method because we're using the
+		// raw type for builder,
+		// even though this method doesn't use builder's (missing) type parameter. Our
+		// usage seems obviously
+		// correct, though, hence the suppression.
+		@SuppressWarnings("unchecked")
+		public Map<String, String> logConfig() {
+			return builder.logConfig();
+		}
+
+		public boolean loggingEnabled() {
+			return builder.loggingEnabled();
+		}
+
+		private String name() {
+			return builder.name();
+		}
+
+		private Set<String> users() {
+			return users;
+		}
+
+		long retentionPeriod() {
+			if (builder instanceof WindowStoreBuilder) {
+				return ((WindowStoreBuilder) builder).retentionPeriod();
+			} else if (builder instanceof TimestampedWindowStoreBuilder) {
+				return ((TimestampedWindowStoreBuilder) builder).retentionPeriod();
+			} else if (builder instanceof SessionStoreBuilder) {
+				return ((SessionStoreBuilder) builder).retentionPeriod();
+			} else {
+				throw new IllegalStateException("retentionPeriod is not supported when not a window store");
+			}
+		}
+	}
+
 	private final Map<String, StateStoreFactory> stateFactories = new HashMap<>();
 
 	private final Set<String> internalTopicNames = new HashSet<>();
 
 	private final Map<String, StateStore> globalStateStores = new LinkedHashMap<>();
-
 	private final Map<String, StoreBuilder> globalStateBuilders = new LinkedHashMap<>();
 	private Map<Integer, Set<String>> nodeGroups = null;
-	private final Map<String, String> storeToChangelogTopic = new HashMap<>();
 
+	private final Map<String, String> storeToChangelogTopic = new HashMap<>();
 	// map from topics to their matched regex patterns, this is to ensure one topic
 	// is passed through on source node
 	// even if it can be matched by multiple regex patterns
@@ -44,6 +95,7 @@ public class Refac_TopicStore implements ITopicStore {
 	private String applicationId;
 	private final QuickUnion<String> nodeGrouper;
 	private final Map<String, NodeFactory> nodeFactories;
+
 	private final Refac_NodeBuilder nodeBuilder;
 
 	public Refac_TopicStore(Refac_SourceSink sourceSink, Refac_GlobalTopics globalTopics,
@@ -56,41 +108,14 @@ public class Refac_TopicStore implements ITopicStore {
 				internalTopicNames);
 	}
 
-	@Override
-	public boolean containsTopic(String topicName) {
-		return internalTopicNames.contains(topicName);
+	public final void addInternalTopic(final String topicName) {
+		Objects.requireNonNull(topicName, "topicName can't be null");
+		internalTopicNames.add(topicName);
 	}
 
 	@Override
-	public void addToGlobalStateBuilder(StoreBuilder storeBuilder) {
-		globalStateBuilders.put(storeBuilder.name(), storeBuilder);
-	}
-
-	public Map<String, StateStore> globalStateStores() {
-		return Collections.unmodifiableMap(globalStateStores);
-	}
-
-	@Override
-	public Map<Integer, Set<String>> nodeGroups() {
-		if (nodeGroups == null) {
-			nodeGroups = sourceSink.makeNodeGroups();
-		}
-		return nodeGroups;
-	}
-
-	public Map<String, StateStoreFactory> getStateFactories() {
-		return stateFactories;
-	}
-
-	public Set<String> allStateStoreName() {
-		final Set<String> allNames = new HashSet<>(stateFactories.keySet());
-		allNames.addAll(globalStateStores.keySet());
-		return Collections.unmodifiableSet(allNames);
-	}
-
-	@Override
-	public void setNodeGroups(Map<Integer, Set<String>> nodeGroups) {
-		this.nodeGroups = nodeGroups;
+	public void addPatternForTopic(String update, Pattern pattern) {
+		topicToPatterns.put(update, pattern);
 	}
 
 	public final void addStateStore(QuickUnion<String> nodeGrouper, Map<String, NodeFactory> nodeFactories,
@@ -108,6 +133,115 @@ public class Refac_TopicStore implements ITopicStore {
 			}
 		}
 		setNodeGroups(null);
+	}
+
+	@Override
+	public void addToGlobalStateBuilder(StoreBuilder storeBuilder) {
+		globalStateBuilders.put(storeBuilder.name(), storeBuilder);
+	}
+
+	public Set<String> allStateStoreName() {
+		final Set<String> allNames = new HashSet<>(stateFactories.keySet());
+		allNames.addAll(globalStateStores.keySet());
+		return Collections.unmodifiableSet(allNames);
+	}
+
+	public void connectProcessorAndStateStore(QuickUnion<String> nodeGrouper, Map<String, NodeFactory> nodeFactories,
+			final String processorName, final String stateStoreName) {
+		if (globalStateBuilders.containsKey(stateStoreName)) {
+			throw new TopologyException("Global StateStore " + stateStoreName
+					+ " can be used by a Processor without being specified; it should not be explicitly passed.");
+		}
+		if (!stateFactories.containsKey(stateStoreName)) {
+			throw new TopologyException("StateStore " + stateStoreName + " is not added yet.");
+		}
+		if (!nodeFactories.containsKey(processorName)) {
+			throw new TopologyException("Processor " + processorName + " is not added yet.");
+		}
+
+		final StateStoreFactory stateStoreFactory = stateFactories.get(stateStoreName);
+		final Iterator<String> iter = stateStoreFactory.users().iterator();
+		if (iter.hasNext()) {
+			final String user = iter.next();
+			nodeGrouper.unite(user, processorName);
+		}
+		stateStoreFactory.users().add(processorName);
+
+		final NodeFactory nodeFactory = nodeFactories.get(processorName);
+		if (nodeFactory instanceof ProcessorNodeFactory) {
+			final ProcessorNodeFactory processorNodeFactory = (ProcessorNodeFactory) nodeFactory;
+			processorNodeFactory.addStateStore(stateStoreName);
+			sourceSink.connectStateStoreNameToSourceTopicsOrPattern(nodeFactories, stateStoreName,
+					processorNodeFactory);
+		} else {
+			throw new TopologyException(
+					"cannot connect a state store " + stateStoreName + " to a source node or a sink node.");
+		}
+	}
+
+	public final void connectProcessorAndStateStores(final String processorName, final String... stateStoreNames) {
+		Objects.requireNonNull(processorName, "processorName can't be null");
+		Objects.requireNonNull(stateStoreNames, "state store list must not be null");
+		if (stateStoreNames.length == 0) {
+			throw new TopologyException("Must provide at least one state store name.");
+		}
+		for (final String stateStoreName : stateStoreNames) {
+			Objects.requireNonNull(stateStoreName, "state store name must not be null");
+			connectProcessorAndStateStore(nodeGrouper, nodeFactories, processorName, stateStoreName);
+		}
+		setNodeGroups(null);
+	}
+
+	@Override
+	public void connectSourceStoreAndTopic(final String sourceStoreName, final String topic) {
+		if (storeToChangelogTopic.containsKey(sourceStoreName)) {
+			throw new TopologyException("Source store " + sourceStoreName + " is already added.");
+		}
+		storeToChangelogTopic.put(sourceStoreName, topic);
+	}
+
+	@Override
+	public boolean containsTopic(String topicName) {
+		return internalTopicNames.contains(topicName);
+	}
+
+	@Override
+	public List<String> decorateInternalSourceTopics(final Collection<String> sourceTopics) {
+		final List<String> decoratedTopics = new ArrayList<>();
+		for (final String topic : sourceTopics) {
+			if (internalTopicNames.contains(topic)) {
+				decoratedTopics.add(decorateTopic(topic));
+			} else {
+				decoratedTopics.add(topic);
+			}
+		}
+		return decoratedTopics;
+	}
+
+	@Override
+	public String decorateTopic(final String topic) {
+		return nodeBuilder.decorateTopic(topic);
+	}
+
+	public Map<String, StateStoreFactory> getStateFactories() {
+		return stateFactories;
+	}
+
+	public Map<String, StateStore> globalStateStores() {
+		return Collections.unmodifiableMap(globalStateStores);
+	}
+
+	@Override
+	public boolean hasPatternForTopic(String topic) {
+		return topicToPatterns.containsKey(topic);
+	}
+
+	@Override
+	public Map<Integer, Set<String>> nodeGroups() {
+		if (nodeGroups == null) {
+			nodeGroups = sourceSink.makeNodeGroups();
+		}
+		return nodeGroups;
 	}
 
 	public final void rewriteTopology(final StreamsConfig config) {
@@ -128,9 +262,19 @@ public class Refac_TopicStore implements ITopicStore {
 		}
 	}
 
-	public final void addInternalTopic(final String topicName) {
-		Objects.requireNonNull(topicName, "topicName can't be null");
-		internalTopicNames.add(topicName);
+	public void setApplicationId(String applicationId) {
+		this.applicationId = applicationId;
+		this.nodeBuilder.setApplicationId(applicationId);
+	}
+
+	@Override
+	public void setNodeGroups(Map<Integer, Set<String>> nodeGroups) {
+		this.nodeGroups = nodeGroups;
+	}
+
+	@Override
+	public Pattern topicForPattern(String topic) {
+		return topicToPatterns.get(topic);
 	}
 
 	public Map<Integer, TopicsInfo> topicGroups() {
@@ -205,151 +349,7 @@ public class Refac_TopicStore implements ITopicStore {
 	}
 
 	@Override
-	public List<String> decorateInternalSourceTopics(final Collection<String> sourceTopics) {
-		final List<String> decoratedTopics = new ArrayList<>();
-		for (final String topic : sourceTopics) {
-			if (internalTopicNames.contains(topic)) {
-				decoratedTopics.add(decorateTopic(topic));
-			} else {
-				decoratedTopics.add(topic);
-			}
-		}
-		return decoratedTopics;
-	}
-
-	@Override
-	public String decorateTopic(final String topic) {
-		return nodeBuilder.decorateTopic(topic);
-	}
-
-	public final void connectProcessorAndStateStores(final String processorName, final String... stateStoreNames) {
-		Objects.requireNonNull(processorName, "processorName can't be null");
-		Objects.requireNonNull(stateStoreNames, "state store list must not be null");
-		if (stateStoreNames.length == 0) {
-			throw new TopologyException("Must provide at least one state store name.");
-		}
-		for (final String stateStoreName : stateStoreNames) {
-			Objects.requireNonNull(stateStoreName, "state store name must not be null");
-			connectProcessorAndStateStore(nodeGrouper, nodeFactories, processorName, stateStoreName);
-		}
-		setNodeGroups(null);
-	}
-
-	@Override
-	public void connectSourceStoreAndTopic(final String sourceStoreName, final String topic) {
-		if (storeToChangelogTopic.containsKey(sourceStoreName)) {
-			throw new TopologyException("Source store " + sourceStoreName + " is already added.");
-		}
-		storeToChangelogTopic.put(sourceStoreName, topic);
-	}
-
-	public void connectProcessorAndStateStore(QuickUnion<String> nodeGrouper, Map<String, NodeFactory> nodeFactories,
-			final String processorName, final String stateStoreName) {
-		if (globalStateBuilders.containsKey(stateStoreName)) {
-			throw new TopologyException("Global StateStore " + stateStoreName
-					+ " can be used by a Processor without being specified; it should not be explicitly passed.");
-		}
-		if (!stateFactories.containsKey(stateStoreName)) {
-			throw new TopologyException("StateStore " + stateStoreName + " is not added yet.");
-		}
-		if (!nodeFactories.containsKey(processorName)) {
-			throw new TopologyException("Processor " + processorName + " is not added yet.");
-		}
-
-		final StateStoreFactory stateStoreFactory = stateFactories.get(stateStoreName);
-		final Iterator<String> iter = stateStoreFactory.users().iterator();
-		if (iter.hasNext()) {
-			final String user = iter.next();
-			nodeGrouper.unite(user, processorName);
-		}
-		stateStoreFactory.users().add(processorName);
-
-		final NodeFactory nodeFactory = nodeFactories.get(processorName);
-		if (nodeFactory instanceof ProcessorNodeFactory) {
-			final ProcessorNodeFactory processorNodeFactory = (ProcessorNodeFactory) nodeFactory;
-			processorNodeFactory.addStateStore(stateStoreName);
-			sourceSink.connectStateStoreNameToSourceTopicsOrPattern(nodeFactories, stateStoreName,
-					processorNodeFactory);
-		} else {
-			throw new TopologyException(
-					"cannot connect a state store " + stateStoreName + " to a source node or a sink node.");
-		}
-	}
-
-	static class StateStoreFactory {
-		private final StoreBuilder builder;
-		private final Set<String> users = new HashSet<>();
-
-		private StateStoreFactory(final StoreBuilder<?> builder) {
-			this.builder = builder;
-		}
-
-		public StateStore build() {
-			return builder.build();
-		}
-
-		long retentionPeriod() {
-			if (builder instanceof WindowStoreBuilder) {
-				return ((WindowStoreBuilder) builder).retentionPeriod();
-			} else if (builder instanceof TimestampedWindowStoreBuilder) {
-				return ((TimestampedWindowStoreBuilder) builder).retentionPeriod();
-			} else if (builder instanceof SessionStoreBuilder) {
-				return ((SessionStoreBuilder) builder).retentionPeriod();
-			} else {
-				throw new IllegalStateException("retentionPeriod is not supported when not a window store");
-			}
-		}
-
-		private Set<String> users() {
-			return users;
-		}
-
-		public boolean loggingEnabled() {
-			return builder.loggingEnabled();
-		}
-
-		private String name() {
-			return builder.name();
-		}
-
-		public boolean isWindowStore() {
-			return builder instanceof WindowStoreBuilder || builder instanceof TimestampedWindowStoreBuilder
-					|| builder instanceof SessionStoreBuilder;
-		}
-
-		// Apparently Java strips the generics from this method because we're using the
-		// raw type for builder,
-		// even though this method doesn't use builder's (missing) type parameter. Our
-		// usage seems obviously
-		// correct, though, hence the suppression.
-		@SuppressWarnings("unchecked")
-		public Map<String, String> logConfig() {
-			return builder.logConfig();
-		}
-	}
-
-	@Override
 	public boolean validateStoreName(String storeName) {
 		return !stateFactories.containsKey(storeName) && !globalStateBuilders.containsKey(storeName);
-	}
-
-	@Override
-	public Pattern topicForPattern(String topic) {
-		return topicToPatterns.get(topic);
-	}
-
-	@Override
-	public boolean hasPatternForTopic(String topic) {
-		return topicToPatterns.containsKey(topic);
-	}
-
-	@Override
-	public void addPatternForTopic(String update, Pattern pattern) {
-		topicToPatterns.put(update, pattern);
-	}
-
-	public void setApplicationId(String applicationId) {
-		this.applicationId = applicationId;
-		this.nodeBuilder.setApplicationId(applicationId);
 	}
 }

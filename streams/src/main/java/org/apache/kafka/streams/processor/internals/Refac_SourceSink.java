@@ -45,13 +45,13 @@ public class Refac_SourceSink {
 	// groups of source processors that need to be copartitioned
 	private final List<Set<String>> copartitionSourceGroups = new ArrayList<>();
 
-	private Map<String, NodeFactory> nodeFactories;
+	private final Map<String, NodeFactory> nodeFactories;
 
-	private SubscriptionUpdates subscriptionUpdates;
+	private final SubscriptionUpdates subscriptionUpdates;
 
-	private Refac_GlobalTopics globalTopics;
+	private final Refac_GlobalTopics globalTopics;
 
-	private QuickUnion<String> nodeGrouper;
+	private final QuickUnion<String> nodeGrouper;
 
 	public Refac_SourceSink(Map<String, NodeFactory> nodeFactories, SubscriptionUpdates subscriptionUpdates,
 			Refac_GlobalTopics globalTopics, QuickUnion<String> nodeGrouper) {

@@ -14,9 +14,17 @@ import org.apache.kafka.streams.processor.internals.nf.SourceNodeFactory;
 
 public class Refac_TopologyDescriptionGen {
 
+	private static void updateSize(final AbstractNode node, final int delta) {
+		node.size += delta;
+
+		for (final TopologyDescription.Node predecessor : node.predecessors()) {
+			updateSize((AbstractNode) predecessor, delta);
+		}
+	}
 	private final ITopicStore topicStore;
 	private final Refac_SourceSink sourceSink;
 	private final Map<String, NodeFactory> nodeFactories;
+
 	private final Refac_GlobalTopics globalTopics;
 
 	public Refac_TopologyDescriptionGen(ITopicStore topicStore, Refac_SourceSink sourceSink,
@@ -43,15 +51,6 @@ public class Refac_TopologyDescriptionGen {
 		}
 
 		return description;
-	}
-
-	private boolean nodeGroupContainsGlobalSourceNode(final Set<String> allNodesOfGroups) {
-		for (final String node : allNodesOfGroups) {
-			if (isGlobalSource(node)) {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	private void describeSubtopology(final TopologyDescription description, final Integer subtopologyId,
@@ -87,11 +86,12 @@ public class Refac_TopologyDescriptionGen {
 		return false;
 	}
 
-	private static void updateSize(final AbstractNode node, final int delta) {
-		node.size += delta;
-
-		for (final TopologyDescription.Node predecessor : node.predecessors()) {
-			updateSize((AbstractNode) predecessor, delta);
+	private boolean nodeGroupContainsGlobalSourceNode(final Set<String> allNodesOfGroups) {
+		for (final String node : allNodesOfGroups) {
+			if (isGlobalSource(node)) {
+				return true;
+			}
 		}
+		return false;
 	}
 }
