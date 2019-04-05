@@ -42,12 +42,12 @@ public class Refac_TopicPatterns {
 
 	private QuickUnion<String> nodeGrouper;
 
-	private Refac_TopicStore topicStore;
+	private ITopicStore topicStore;
 
 	private Refac_GlobalTopics globalTopics;
 
 	public Refac_TopicPatterns(Map<String, NodeFactory> nodeFactories, Refac_SourceSink sourceSink,
-			QuickUnion<String> nodeGrouper, Refac_TopicStore topicStore, Refac_GlobalTopics globalTopics) {
+			QuickUnion<String> nodeGrouper, ITopicStore topicStore, Refac_GlobalTopics globalTopics) {
 		this.nodeFactories = nodeFactories;
 		this.sourceSink = sourceSink;
 		this.nodeGrouper = nodeGrouper;
@@ -265,9 +265,9 @@ public class Refac_TopicPatterns {
 	}
 
 	private Pattern resetTopicsPattern(final Set<String> resetTopics, final Set<Pattern> resetPatterns) {
-		final List<String> topics = topicStore.maybeDecorateInternalSourceTopics(resetTopics);
+		final List<String> topics = topicStore.decorateInternalSourceTopics(resetTopics);
 
-		return Refac_TopicStore.buildPatternForOffsetResetTopics(topics, resetPatterns);
+		return Refac_TopicHelper.buildPatternForOffsetResetTopics(topics, resetPatterns);
 	}
 
 	public void validateTopicNotAlreadyRegistered(final String topic) {

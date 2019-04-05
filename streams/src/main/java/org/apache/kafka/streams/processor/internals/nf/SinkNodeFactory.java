@@ -4,8 +4,8 @@ import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.streams.processor.StreamPartitioner;
 import org.apache.kafka.streams.processor.TopicNameExtractor;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.Sink;
+import org.apache.kafka.streams.processor.internals.ITopicStore;
 import org.apache.kafka.streams.processor.internals.ProcessorNode;
-import org.apache.kafka.streams.processor.internals.Refac_TopicStore;
 import org.apache.kafka.streams.processor.internals.SinkNode;
 import org.apache.kafka.streams.processor.internals.StaticTopicNameExtractor;
 
@@ -14,12 +14,12 @@ public class SinkNodeFactory<K, V> extends NodeFactory {
 	private final Serializer<V> valSerializer;
 	private final StreamPartitioner<? super K, ? super V> partitioner;
 	private final TopicNameExtractor<K, V> topicExtractor;
-	private Refac_TopicStore topicStore;
+	private ITopicStore topicStore;
 
 	public SinkNodeFactory(final String name, final String[] predecessors,
 			final TopicNameExtractor<K, V> topicExtractor, final Serializer<K> keySerializer,
 			final Serializer<V> valSerializer, final StreamPartitioner<? super K, ? super V> partitioner,
-			final Refac_TopicStore topicStore) {
+			final ITopicStore topicStore) {
 		super(name, predecessors.clone());
 		this.topicExtractor = topicExtractor;
 		this.keySerializer = keySerializer;
@@ -49,7 +49,7 @@ public class SinkNodeFactory<K, V> extends NodeFactory {
 	}
 
 	@Override
-	Sink describe() {
+	public Sink describe() {
 		return new Sink(name, topicExtractor);
 	}
 }

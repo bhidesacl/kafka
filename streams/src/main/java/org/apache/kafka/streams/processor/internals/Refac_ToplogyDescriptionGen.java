@@ -14,12 +14,12 @@ import org.apache.kafka.streams.processor.internals.nf.SourceNodeFactory;
 
 public class Refac_ToplogyDescriptionGen {
 
-	private Refac_TopicStore topicStore;
+	private ITopicStore topicStore;
 	private Refac_SourceSink sourceSink;
 	private Map<String, NodeFactory> nodeFactories;
 	private Refac_GlobalTopics globalTopics;
 
-	public Refac_ToplogyDescriptionGen(Refac_TopicStore topicStore, Refac_SourceSink sourceSink,
+	public Refac_ToplogyDescriptionGen(ITopicStore topicStore, Refac_SourceSink sourceSink,
 			Map<String, NodeFactory> nodeFactories, Refac_GlobalTopics globalTopics) {
 		this.topicStore = topicStore;
 		this.sourceSink = sourceSink;

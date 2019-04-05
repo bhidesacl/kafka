@@ -93,22 +93,22 @@ public class Refac_SourceSink {
 		return result;
 	}
 
-	public Pattern sourceTopicPattern(Refac_TopicStore topicStore) {
+	public Pattern sourceTopicPattern(ITopicStore topicStore) {
 		final List<String> allSourceTopics = new ArrayList<>();
 		if (!nodeToSourceTopics.isEmpty()) {
 			for (final List<String> topics : nodeToSourceTopics.values()) {
-				allSourceTopics.addAll(topicStore.maybeDecorateInternalSourceTopics(topics));
+				allSourceTopics.addAll(topicStore.decorateInternalSourceTopics(topics));
 			}
 		}
 		Collections.sort(allSourceTopics);
 
-		return Refac_TopicStore.buildPatternForOffsetResetTopics(allSourceTopics, nodeToSourcePatterns.values());
+		return Refac_TopicHelper.buildPatternForOffsetResetTopics(allSourceTopics, nodeToSourcePatterns.values());
 	}
 
-	public Map<String, List<String>> stateStoreNameToSourceTopics(Refac_TopicStore topicStore) {
+	public Map<String, List<String>> stateStoreNameToSourceTopics(ITopicStore topicStore) {
 		final Map<String, List<String>> results = new HashMap<>();
 		for (final Map.Entry<String, Set<String>> entry : stateStoreNameToSourceTopics.entrySet()) {
-			results.put(entry.getKey(), topicStore.maybeDecorateInternalSourceTopics(entry.getValue()));
+			results.put(entry.getKey(), topicStore.decorateInternalSourceTopics(entry.getValue()));
 		}
 		return results;
 	}
@@ -117,14 +117,14 @@ public class Refac_SourceSink {
 		copartitionSourceGroups.add(Collections.unmodifiableSet(new HashSet<>(sourceNodes)));
 	}
 
-	public Collection<Set<String>> copartitionGroups(Refac_TopicStore topicStore) {
+	public Collection<Set<String>> copartitionGroups(ITopicStore topicStore) {
 		final List<Set<String>> list = new ArrayList<>(copartitionSourceGroups.size());
 		for (final Set<String> nodeNames : copartitionSourceGroups) {
 			final Set<String> copartitionGroup = new HashSet<>();
 			for (final String node : nodeNames) {
 				final List<String> topics = nodeToSourceTopics.get(node);
 				if (topics != null) {
-					copartitionGroup.addAll(topicStore.maybeDecorateInternalSourceTopics(topics));
+					copartitionGroup.addAll(topicStore.decorateInternalSourceTopics(topics));
 				}
 			}
 			list.add(Collections.unmodifiableSet(copartitionGroup));

@@ -12,6 +12,7 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.streams.errors.TopologyException;
 import org.apache.kafka.streams.processor.TimestampExtractor;
 import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.Source;
+import org.apache.kafka.streams.processor.internals.ITopicStore;
 import org.apache.kafka.streams.processor.internals.ProcessorNode;
 import org.apache.kafka.streams.processor.internals.Refac_SourceSink;
 import org.apache.kafka.streams.processor.internals.Refac_TopicStore;
@@ -25,12 +26,12 @@ public class SourceNodeFactory extends NodeFactory {
 	private final Deserializer<?> keyDeserializer;
 	private final Deserializer<?> valDeserializer;
 	private final TimestampExtractor timestampExtractor;
-	private Refac_TopicStore topicStore;
+	private ITopicStore topicStore;
 	private Refac_SourceSink sourceSink;
 
 	public SourceNodeFactory(final String name, final String[] topics, final Pattern pattern,
 			final TimestampExtractor timestampExtractor, final Deserializer<?> keyDeserializer,
-			final Deserializer<?> valDeserializer, final Refac_TopicStore topicStore,
+			final Deserializer<?> valDeserializer, final ITopicStore topicStore,
 			final Refac_SourceSink sourceSink) {
 		super(name, NO_PREDECESSORS);
 		this.topics = topics != null ? Arrays.asList(topics) : new ArrayList<>();
@@ -85,7 +86,7 @@ public class SourceNodeFactory extends NodeFactory {
 			return new SourceNode<>(name, Collections.singletonList(String.valueOf(pattern)), timestampExtractor,
 					keyDeserializer, valDeserializer);
 		} else {
-			return new SourceNode<>(name, topicStore.maybeDecorateInternalSourceTopics(sourceTopics),
+			return new SourceNode<>(name, topicStore.decorateInternalSourceTopics(sourceTopics),
 					timestampExtractor, keyDeserializer, valDeserializer);
 		}
 	}
@@ -103,7 +104,7 @@ public class SourceNodeFactory extends NodeFactory {
 	}
 
 	@Override
-	Source describe() {
+	public Source describe() {
 		return new Source(name, new HashSet<>(topics), pattern);
 	}
 }

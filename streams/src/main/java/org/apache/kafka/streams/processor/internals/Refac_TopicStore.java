@@ -27,8 +27,7 @@ import org.apache.kafka.streams.state.internals.SessionStoreBuilder;
 import org.apache.kafka.streams.state.internals.TimestampedWindowStoreBuilder;
 import org.apache.kafka.streams.state.internals.WindowStoreBuilder;
 
-public class Refac_TopicStore {
-	private static final Pattern EMPTY_ZERO_LENGTH_PATTERN = Pattern.compile("");
+public class Refac_TopicStore implements ITopicStore {
 	private final Map<String, StateStoreFactory> stateFactories = new HashMap<>();
 
 	private final Set<String> internalTopicNames = new HashSet<>();
@@ -49,13 +48,15 @@ public class Refac_TopicStore {
 	private final QuickUnion<String> nodeGrouper;
 	private final Map<String, NodeFactory> nodeFactories;
 
-	public Refac_TopicStore(Refac_SourceSink sourceSink, Refac_GlobalTopics globalTopics, QuickUnion<String> nodeGrouper, Map<String, NodeFactory> nodeFactories) {
+	public Refac_TopicStore(Refac_SourceSink sourceSink, Refac_GlobalTopics globalTopics,
+			QuickUnion<String> nodeGrouper, Map<String, NodeFactory> nodeFactories) {
 		this.sourceSink = sourceSink;
 		this.globalTopics = globalTopics;
 		this.nodeGrouper = nodeGrouper;
 		this.nodeFactories = nodeFactories;
 	}
 
+	@Override
 	public boolean containsTopic(String topicName) {
 		return internalTopicNames.contains(topicName);
 	}
@@ -68,6 +69,7 @@ public class Refac_TopicStore {
 		return Collections.unmodifiableMap(globalStateStores);
 	}
 
+	@Override
 	public Map<Integer, Set<String>> nodeGroups() {
 		if (nodeGroups == null) {
 			nodeGroups = sourceSink.makeNodeGroups();
@@ -183,8 +185,8 @@ public class Refac_TopicStore {
 								? storeToChangelogTopic.get(stateFactory.name())
 								: ProcessorStateManager.storeChangelogTopic(applicationId, stateFactory.name());
 						if (!stateChangelogTopics.containsKey(topicName)) {
-							final InternalTopicConfig internalTopicConfig = createChangelogTopicConfig(stateFactory,
-									topicName);
+							final InternalTopicConfig internalTopicConfig = Refac_TopicHelper
+									.createChangelogTopicConfig(stateFactory, topicName);
 							stateChangelogTopics.put(topicName, internalTopicConfig);
 						}
 					}
@@ -298,12 +300,12 @@ public class Refac_TopicStore {
 				} else {
 					topicSinkMap.put(topic, node);
 				}
-
 			}
 		}
 	}
 
-	public List<String> maybeDecorateInternalSourceTopics(final Collection<String> sourceTopics) {
+	@Override
+	public List<String> decorateInternalSourceTopics(final Collection<String> sourceTopics) {
 		final List<String> decoratedTopics = new ArrayList<>();
 		for (final String topic : sourceTopics) {
 			if (internalTopicNames.contains(topic)) {
@@ -315,6 +317,7 @@ public class Refac_TopicStore {
 		return decoratedTopics;
 	}
 
+	@Override
 	public String decorateTopic(final String topic) {
 		if (applicationId == null) {
 			throw new TopologyException("there are internal topics and " + "applicationId hasn't been set. Call "
@@ -323,7 +326,7 @@ public class Refac_TopicStore {
 
 		return applicationId + "-" + topic;
 	}
-	
+
 	public final void connectProcessorAndStateStores(final String processorName, final String... stateStoreNames) {
 		Objects.requireNonNull(processorName, "processorName can't be null");
 		Objects.requireNonNull(stateStoreNames, "state store list must not be null");
@@ -377,16 +380,6 @@ public class Refac_TopicStore {
 		}
 	}
 
-	private InternalTopicConfig createChangelogTopicConfig(final StateStoreFactory factory, final String name) {
-		if (factory.isWindowStore()) {
-			final WindowedChangelogTopicConfig config = new WindowedChangelogTopicConfig(name, factory.logConfig());
-			config.setRetentionMs(factory.retentionPeriod());
-			return config;
-		} else {
-			return new UnwindowedChangelogTopicConfig(name, factory.logConfig());
-		}
-	}
-
 	static class StateStoreFactory {
 		private final StoreBuilder builder;
 		private final Set<String> users = new HashSet<>();
@@ -423,7 +416,7 @@ public class Refac_TopicStore {
 			return builder.name();
 		}
 
-		private boolean isWindowStore() {
+		public boolean isWindowStore() {
 			return builder instanceof WindowStoreBuilder || builder instanceof TimestampedWindowStoreBuilder
 					|| builder instanceof SessionStoreBuilder;
 		}
@@ -434,7 +427,7 @@ public class Refac_TopicStore {
 		// usage seems obviously
 		// correct, though, hence the suppression.
 		@SuppressWarnings("unchecked")
-		private Map<String, String> logConfig() {
+		public Map<String, String> logConfig() {
 			return builder.logConfig();
 		}
 	}
@@ -443,36 +436,19 @@ public class Refac_TopicStore {
 		return !stateFactories.containsKey(storeName) && !globalStateBuilders.containsKey(storeName);
 	}
 
+	@Override
 	public Pattern topicForPattern(String topic) {
 		return topicToPatterns.get(topic);
 	}
 
+	@Override
 	public boolean hasPatternForTopic(String topic) {
 		return topicToPatterns.containsKey(topic);
 	}
 
+	@Override
 	public void addPatternForTopic(String update, Pattern pattern) {
 		topicToPatterns.put(update, pattern);
-	}
-
-	public static Pattern buildPatternForOffsetResetTopics(final Collection<String> sourceTopics,
-			final Collection<Pattern> sourcePatterns) {
-		final StringBuilder builder = new StringBuilder();
-
-		for (final String topic : sourceTopics) {
-			builder.append(topic).append("|");
-		}
-
-		for (final Pattern sourcePattern : sourcePatterns) {
-			builder.append(sourcePattern.pattern()).append("|");
-		}
-
-		if (builder.length() > 0) {
-			builder.setLength(builder.length() - 1);
-			return Pattern.compile(builder.toString());
-		}
-
-		return EMPTY_ZERO_LENGTH_PATTERN;
 	}
 
 	public void setApplicationId(String applicationId) {
