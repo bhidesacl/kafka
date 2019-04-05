@@ -61,144 +61,16 @@ public class Refac_SourceSink {
 		this.nodeGrouper = nodeGrouper;
 	}
 
-	public List<String> sourceTopicsForNode(String name) {
-		return nodeToSourceTopics.get(name);
-	}
-
-	public void addSourceTopicsToNode(String name, List<String> topics) {
-		nodeToSourceTopics.put(name, topics);
+	public void addSinkTopicToNode(String name, String topic) {
+		nodeToSinkTopic.put(name, topic);
 	}
 
 	public void addSourcePatternToNode(String name, Pattern topicPattern) {
 		nodeToSourcePatterns.put(name, topicPattern);
 	}
 
-	public void addSinkTopicToNode(String name, String topic) {
-		nodeToSinkTopic.put(name, topic);
-	}
-
-	public boolean hasSinkTopicForNode(String name) {
-		return nodeToSinkTopic.containsKey(name);
-	}
-
-	public boolean topicMatchesPattern(String topic) {
-		boolean result = false;
-		for (final Pattern pattern : nodeToSourcePatterns.values()) {
-			if (pattern.matcher(topic).matches()) {
-				result = true;
-				break;
-			}
-		}
-
-		return result;
-	}
-
-	public Pattern sourceTopicPattern(ITopicStore topicStore) {
-		final List<String> allSourceTopics = new ArrayList<>();
-		if (!nodeToSourceTopics.isEmpty()) {
-			for (final List<String> topics : nodeToSourceTopics.values()) {
-				allSourceTopics.addAll(topicStore.decorateInternalSourceTopics(topics));
-			}
-		}
-		Collections.sort(allSourceTopics);
-
-		return Refac_TopicHelper.buildPatternForOffsetResetTopics(allSourceTopics, nodeToSourcePatterns.values());
-	}
-
-	public Map<String, List<String>> stateStoreNameToSourceTopics(ITopicStore topicStore) {
-		final Map<String, List<String>> results = new HashMap<>();
-		for (final Map.Entry<String, Set<String>> entry : stateStoreNameToSourceTopics.entrySet()) {
-			results.put(entry.getKey(), topicStore.decorateInternalSourceTopics(entry.getValue()));
-		}
-		return results;
-	}
-
-	public void copartitionSources(Collection<String> sourceNodes) {
-		copartitionSourceGroups.add(Collections.unmodifiableSet(new HashSet<>(sourceNodes)));
-	}
-
-	public Collection<Set<String>> copartitionGroups(ITopicStore topicStore) {
-		final List<Set<String>> list = new ArrayList<>(copartitionSourceGroups.size());
-		for (final Set<String> nodeNames : copartitionSourceGroups) {
-			final Set<String> copartitionGroup = new HashSet<>();
-			for (final String node : nodeNames) {
-				final List<String> topics = nodeToSourceTopics.get(node);
-				if (topics != null) {
-					copartitionGroup.addAll(topicStore.decorateInternalSourceTopics(topics));
-				}
-			}
-			list.add(Collections.unmodifiableSet(copartitionGroup));
-		}
-		return Collections.unmodifiableList(list);
-	}
-
-	public String sinkTopicForNode(String node) {
-		return nodeToSinkTopic.get(node);
-	}
-
-	public void setRegexMatchedTopicsToSourceNodes() {
-		if (subscriptionUpdates.hasUpdates()) {
-			for (final Map.Entry<String, Pattern> stringPatternEntry : nodeToSourcePatterns.entrySet()) {
-				final SourceNodeFactory sourceNode = (SourceNodeFactory) nodeFactories.get(stringPatternEntry.getKey());
-				// need to update nodeToSourceTopics with topics matched from given regex
-				nodeToSourceTopics.put(stringPatternEntry.getKey(),
-						sourceNode.getTopics(subscriptionUpdates.getUpdates()));
-			}
-		}
-	}
-
-	public void setRegexMatchedTopicToStateStore() {
-		if (subscriptionUpdates.hasUpdates()) {
-			for (final Map.Entry<String, Set<Pattern>> storePattern : stateStoreNameToSourceRegex.entrySet()) {
-				final Set<String> updatedTopicsForStateStore = new HashSet<>();
-				for (final String subscriptionUpdateTopic : subscriptionUpdates.getUpdates()) {
-					for (final Pattern pattern : storePattern.getValue()) {
-						if (pattern.matcher(subscriptionUpdateTopic).matches()) {
-							updatedTopicsForStateStore.add(subscriptionUpdateTopic);
-						}
-					}
-				}
-				if (!updatedTopicsForStateStore.isEmpty()) {
-					final Collection<String> storeTopics = stateStoreNameToSourceTopics.get(storePattern.getKey());
-					if (storeTopics != null) {
-						updatedTopicsForStateStore.addAll(storeTopics);
-					}
-					stateStoreNameToSourceTopics.put(storePattern.getKey(),
-							Collections.unmodifiableSet(updatedTopicsForStateStore));
-				}
-			}
-		}
-	}
-
-	public void describeGlobalStore(final TopologyDescription description, final Set<String> nodes, final int id) {
-		final Iterator<String> it = nodes.iterator();
-		while (it.hasNext()) {
-			final String node = it.next();
-
-			if (isGlobalSource(node)) {
-				// we found a GlobalStore node group; those contain exactly two node:
-				// {sourceNode,processorNode}
-				it.remove(); // remove sourceNode from group
-				final String processorNode = nodes.iterator().next(); // get remaining processorNode
-
-				description
-						.addGlobalStore(new GlobalStore(
-								node, processorNode, ((ProcessorNodeFactory) nodeFactories.get(processorNode))
-										.getStateStoreNames().iterator().next(),
-								nodeToSourceTopics.get(node).get(0), id));
-				break;
-			}
-		}
-	}
-
-	private boolean isGlobalSource(final String nodeName) {
-		final NodeFactory nodeFactory = nodeFactories.get(nodeName);
-
-		if (nodeFactory instanceof SourceNodeFactory) {
-			final List<String> topics = ((SourceNodeFactory) nodeFactory).getTopics();
-			return topics != null && topics.size() == 1 && globalTopics.contains(topics.get(0));
-		}
-		return false;
+	public void addSourceTopicsToNode(String name, List<String> topics) {
+		nodeToSourceTopics.put(name, topics);
 	}
 
 	public void connectStateStoreNameToSourceTopicsOrPattern(Map<String, NodeFactory> nodeFactories,
@@ -235,19 +107,48 @@ public class Refac_SourceSink {
 
 	}
 
-	private Set<SourceNodeFactory> findSourcesForProcessorPredecessors(Map<String, NodeFactory> nodeFactories,
-			final String[] predecessors) {
-		final Set<SourceNodeFactory> sourceNodes = new HashSet<>();
-		for (final String predecessor : predecessors) {
-			final NodeFactory nodeFactory = nodeFactories.get(predecessor);
-			if (nodeFactory instanceof SourceNodeFactory) {
-				sourceNodes.add((SourceNodeFactory) nodeFactory);
-			} else if (nodeFactory instanceof ProcessorNodeFactory) {
-				sourceNodes.addAll(findSourcesForProcessorPredecessors(nodeFactories,
-						((ProcessorNodeFactory) nodeFactory).getPredecessors()));
+	public Collection<Set<String>> copartitionGroups(ITopicStore topicStore) {
+		final List<Set<String>> list = new ArrayList<>(copartitionSourceGroups.size());
+		for (final Set<String> nodeNames : copartitionSourceGroups) {
+			final Set<String> copartitionGroup = new HashSet<>();
+			for (final String node : nodeNames) {
+				final List<String> topics = nodeToSourceTopics.get(node);
+				if (topics != null) {
+					copartitionGroup.addAll(topicStore.decorateInternalSourceTopics(topics));
+				}
+			}
+			list.add(Collections.unmodifiableSet(copartitionGroup));
+		}
+		return Collections.unmodifiableList(list);
+	}
+
+	public void copartitionSources(Collection<String> sourceNodes) {
+		copartitionSourceGroups.add(Collections.unmodifiableSet(new HashSet<>(sourceNodes)));
+	}
+
+	public void describeGlobalStore(final TopologyDescription description, final Set<String> nodes, final int id) {
+		final Iterator<String> it = nodes.iterator();
+		while (it.hasNext()) {
+			final String node = it.next();
+
+			if (isGlobalSource(node)) {
+				// we found a GlobalStore node group; those contain exactly two node:
+				// {sourceNode,processorNode}
+				it.remove(); // remove sourceNode from group
+				final String processorNode = nodes.iterator().next(); // get remaining processorNode
+
+				description
+						.addGlobalStore(new GlobalStore(
+								node, processorNode, ((ProcessorNodeFactory) nodeFactories.get(processorNode))
+										.getStateStoreNames().iterator().next(),
+								nodeToSourceTopics.get(node).get(0), id));
+				break;
 			}
 		}
-		return sourceNodes;
+	}
+
+	public boolean hasSinkTopicForNode(String name) {
+		return nodeToSinkTopic.containsKey(name);
 	}
 
 	public Map<Integer, Set<String>> makeNodeGroups() {
@@ -273,6 +174,105 @@ public class Refac_SourceSink {
 		}
 
 		return nodeGroups;
+	}
+
+	public void setRegexMatchedTopicsToSourceNodes() {
+		if (subscriptionUpdates.hasUpdates()) {
+			for (final Map.Entry<String, Pattern> stringPatternEntry : nodeToSourcePatterns.entrySet()) {
+				final SourceNodeFactory sourceNode = (SourceNodeFactory) nodeFactories.get(stringPatternEntry.getKey());
+				// need to update nodeToSourceTopics with topics matched from given regex
+				nodeToSourceTopics.put(stringPatternEntry.getKey(),
+						sourceNode.getTopics(subscriptionUpdates.getUpdates()));
+			}
+		}
+	}
+
+	public void setRegexMatchedTopicToStateStore() {
+		if (subscriptionUpdates.hasUpdates()) {
+			for (final Map.Entry<String, Set<Pattern>> storePattern : stateStoreNameToSourceRegex.entrySet()) {
+				final Set<String> updatedTopicsForStateStore = new HashSet<>();
+				for (final String subscriptionUpdateTopic : subscriptionUpdates.getUpdates()) {
+					for (final Pattern pattern : storePattern.getValue()) {
+						if (pattern.matcher(subscriptionUpdateTopic).matches()) {
+							updatedTopicsForStateStore.add(subscriptionUpdateTopic);
+						}
+					}
+				}
+				if (!updatedTopicsForStateStore.isEmpty()) {
+					final Collection<String> storeTopics = stateStoreNameToSourceTopics.get(storePattern.getKey());
+					if (storeTopics != null) {
+						updatedTopicsForStateStore.addAll(storeTopics);
+					}
+					stateStoreNameToSourceTopics.put(storePattern.getKey(),
+							Collections.unmodifiableSet(updatedTopicsForStateStore));
+				}
+			}
+		}
+	}
+
+	public String sinkTopicForNode(String node) {
+		return nodeToSinkTopic.get(node);
+	}
+
+	public Pattern sourceTopicPattern(ITopicStore topicStore) {
+		final List<String> allSourceTopics = new ArrayList<>();
+		if (!nodeToSourceTopics.isEmpty()) {
+			for (final List<String> topics : nodeToSourceTopics.values()) {
+				allSourceTopics.addAll(topicStore.decorateInternalSourceTopics(topics));
+			}
+		}
+		Collections.sort(allSourceTopics);
+
+		return Refac_TopicHelper.buildPatternForOffsetResetTopics(allSourceTopics, nodeToSourcePatterns.values());
+	}
+
+	public List<String> sourceTopicsForNode(String name) {
+		return nodeToSourceTopics.get(name);
+	}
+
+	public Map<String, List<String>> stateStoreNameToSourceTopics(ITopicStore topicStore) {
+		final Map<String, List<String>> results = new HashMap<>();
+		for (final Map.Entry<String, Set<String>> entry : stateStoreNameToSourceTopics.entrySet()) {
+			results.put(entry.getKey(), topicStore.decorateInternalSourceTopics(entry.getValue()));
+		}
+		return results;
+	}
+
+	public boolean topicMatchesPattern(String topic) {
+		boolean result = false;
+		for (final Pattern pattern : nodeToSourcePatterns.values()) {
+			if (pattern.matcher(topic).matches()) {
+				result = true;
+				break;
+			}
+		}
+
+		return result;
+	}
+
+	private Set<SourceNodeFactory> findSourcesForProcessorPredecessors(Map<String, NodeFactory> nodeFactories,
+			final String[] predecessors) {
+		final Set<SourceNodeFactory> sourceNodes = new HashSet<>();
+		for (final String predecessor : predecessors) {
+			final NodeFactory nodeFactory = nodeFactories.get(predecessor);
+			if (nodeFactory instanceof SourceNodeFactory) {
+				sourceNodes.add((SourceNodeFactory) nodeFactory);
+			} else if (nodeFactory instanceof ProcessorNodeFactory) {
+				sourceNodes.addAll(findSourcesForProcessorPredecessors(nodeFactories,
+						((ProcessorNodeFactory) nodeFactory).getPredecessors()));
+			}
+		}
+		return sourceNodes;
+	}
+
+	private boolean isGlobalSource(final String nodeName) {
+		final NodeFactory nodeFactory = nodeFactories.get(nodeName);
+
+		if (nodeFactory instanceof SourceNodeFactory) {
+			final List<String> topics = ((SourceNodeFactory) nodeFactory).getTopics();
+			return topics != null && topics.size() == 1 && globalTopics.contains(topics.get(0));
+		}
+		return false;
 	}
 
 	private int putNodeGroupName(final String nodeName, final int nodeGroupId,

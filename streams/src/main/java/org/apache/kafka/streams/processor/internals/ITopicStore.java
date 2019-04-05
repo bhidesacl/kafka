@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import org.apache.kafka.streams.state.StoreBuilder;
+
 public interface ITopicStore {
 
 	List<String> decorateInternalSourceTopics(Collection<String> sourceTopics);
@@ -21,5 +23,13 @@ public interface ITopicStore {
 	boolean hasPatternForTopic(String topic);
 
 	void addPatternForTopic(String update, Pattern pattern);
+
+	void setNodeGroups(Map<Integer, Set<String>> nodeGroups);
+
+	void addToGlobalStateBuilder(StoreBuilder storeBuilder);
+
+	void connectSourceStoreAndTopic(String sourceStoreName, String topic);
+
+	boolean validateStoreName(String storeName);
 
 }

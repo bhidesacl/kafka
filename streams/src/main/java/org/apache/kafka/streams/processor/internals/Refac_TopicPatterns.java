@@ -36,15 +36,15 @@ public class Refac_TopicPatterns {
 
 	private final Set<Pattern> latestResetPatterns = new HashSet<>();
 
-	private Map<String, NodeFactory> nodeFactories;
+	private final Map<String, NodeFactory> nodeFactories;
 
-	private Refac_SourceSink sourceSink;
+	private final Refac_SourceSink sourceSink;
 
-	private QuickUnion<String> nodeGrouper;
+	private final QuickUnion<String> nodeGrouper;
 
-	private ITopicStore topicStore;
+	private final ITopicStore topicStore;
 
-	private Refac_GlobalTopics globalTopics;
+	private final Refac_GlobalTopics globalTopics;
 
 	public Refac_TopicPatterns(Map<String, NodeFactory> nodeFactories, Refac_SourceSink sourceSink,
 			QuickUnion<String> nodeGrouper, ITopicStore topicStore, Refac_GlobalTopics globalTopics) {

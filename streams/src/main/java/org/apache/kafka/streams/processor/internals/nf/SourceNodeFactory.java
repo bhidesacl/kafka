@@ -15,7 +15,6 @@ import org.apache.kafka.streams.processor.internals.InternalTopologyBuilder.Sour
 import org.apache.kafka.streams.processor.internals.ITopicStore;
 import org.apache.kafka.streams.processor.internals.ProcessorNode;
 import org.apache.kafka.streams.processor.internals.Refac_SourceSink;
-import org.apache.kafka.streams.processor.internals.Refac_TopicStore;
 import org.apache.kafka.streams.processor.internals.SourceNode;
 
 public class SourceNodeFactory extends NodeFactory {
